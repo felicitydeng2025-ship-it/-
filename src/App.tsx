@@ -64,6 +64,12 @@ export default function App() {
   const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = playbackRate;
+    }
+  }, [playbackRate, currentSentenceIndex, isPlaying, material]);
+
+  useEffect(() => {
     loadHistory();
   }, []);
 
@@ -852,44 +858,74 @@ export default function App() {
                     </div>
                   </div>
                   
-                  <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-200">
-                    {material.sentences.map((sentence, index) => (
-                      <div 
-                        key={sentence.id}
-                        className={cn(
-                          "p-5 rounded-2xl border transition-all group relative",
-                          currentSentenceIndex === index 
-                            ? "bg-indigo-50 border-indigo-200 shadow-sm" 
-                            : "bg-white border-slate-100 hover:border-slate-200"
-                        )}
-                        onClick={() => playSentence(index)}
-                      >
-                        <div className="flex gap-4">
-                          <div className="flex flex-col items-center gap-2 pt-1">
-                            <span className={cn(
-                              "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full",
-                              currentSentenceIndex === index ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
-                            )}>
-                              {index + 1}
-                            </span>
-                          </div>
-                          <div className="flex-1 space-y-3">
-                            <p className={cn(
-                              "text-lg leading-relaxed transition-colors",
-                              currentSentenceIndex === index ? "text-slate-900 font-medium" : "text-slate-600"
-                            )}>
-                              {sentence.text}
-                            </p>
-                            
-                            {/* Sentence Controls */}
-                            <div className="flex items-center gap-4 pt-2">
-                              <button 
-                                onClick={(e) => { e.stopPropagation(); playSentence(index); }}
-                                className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
-                              >
-                                <Play className="w-3.5 h-3.5 fill-current" />
-                                播放原音
-                              </button>
+                    <div className="max-h-[60vh] overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-200">
+                      {material.sentences.map((sentence, index) => {
+                        const isActive = currentSentenceIndex === index;
+                        const isCurrentlyPlaying = isActive && isPlaying;
+                        
+                        return (
+                          <div 
+                            key={sentence.id}
+                            className={cn(
+                              "p-5 rounded-2xl border transition-all group relative",
+                              isActive 
+                                ? (isCurrentlyPlaying 
+                                    ? "bg-indigo-100 border-indigo-400 shadow-md ring-2 ring-indigo-200" 
+                                    : "bg-indigo-50 border-indigo-200 shadow-sm")
+                                : "bg-white border-slate-100 hover:border-slate-200"
+                            )}
+                            onClick={() => playSentence(index)}
+                          >
+                            <div className="flex gap-4">
+                              <div className="flex flex-col items-center gap-2 pt-1">
+                                <span className={cn(
+                                  "text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full transition-all",
+                                  isActive ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+                                )}>
+                                  {isCurrentlyPlaying ? (
+                                    <motion.div
+                                      animate={{ scale: [0.8, 1.1, 0.8] }}
+                                      transition={{ repeat: Infinity, duration: 1.5 }}
+                                    >
+                                      <Volume2 className="w-3.5 h-3.5" />
+                                    </motion.div>
+                                  ) : (
+                                    index + 1
+                                  )}
+                                </span>
+                              </div>
+                              <div className="flex-1 space-y-3">
+                                <p className={cn(
+                                  "text-lg leading-relaxed transition-colors",
+                                  isActive 
+                                    ? (isCurrentlyPlaying ? "text-indigo-900 font-bold" : "text-slate-900 font-medium") 
+                                    : "text-slate-600"
+                                )}>
+                                  {sentence.text}
+                                </p>
+                                
+                                {/* Sentence Controls */}
+                                <div className="flex items-center gap-4 pt-2">
+                                  <button 
+                                    onClick={(e) => { 
+                                      e.stopPropagation(); 
+                                      if (isCurrentlyPlaying) togglePlay();
+                                      else playSentence(index); 
+                                    }}
+                                    className={cn(
+                                      "flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-colors",
+                                      isCurrentlyPlaying 
+                                        ? "bg-indigo-600 text-white shadow-sm" 
+                                        : "text-indigo-600 hover:bg-indigo-100"
+                                    )}
+                                  >
+                                    {isCurrentlyPlaying ? (
+                                      <Pause className="w-3.5 h-3.5 fill-current" />
+                                    ) : (
+                                      <Play className="w-3.5 h-3.5 fill-current" />
+                                    )}
+                                    {isCurrentlyPlaying ? "正在播放" : "播放原音"}
+                                  </button>
                               
                               <button 
                                 onClick={(e) => {
@@ -909,17 +945,36 @@ export default function App() {
                               </button>
 
                               {recordings[sentence.id] && (
-                                <button 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const audio = new Audio(recordings[sentence.id]);
-                                    audio.play();
-                                  }}
-                                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
-                                >
-                                  <Play className="w-3.5 h-3.5 fill-current" />
-                                  播放我的录音
-                                </button>
+                                <>
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const audio = new Audio(recordings[sentence.id]);
+                                      audio.playbackRate = playbackRate;
+                                      audio.play();
+                                    }}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:bg-emerald-50 px-3 py-1.5 rounded-lg transition-colors"
+                                  >
+                                    <Play className="w-3.5 h-3.5 fill-current" />
+                                    播放我的录音
+                                  </button>
+
+                                  <button 
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      // Play original
+                                      playSentence(index);
+                                      // Play recording
+                                      const userAudio = new Audio(recordings[sentence.id]);
+                                      userAudio.playbackRate = playbackRate;
+                                      userAudio.play();
+                                    }}
+                                    className="flex items-center gap-1.5 text-xs font-bold text-amber-600 hover:bg-amber-50 px-3 py-1.5 rounded-lg transition-colors"
+                                  >
+                                    <Volume2 className="w-3.5 h-3.5" />
+                                    对比录音
+                                  </button>
+                                </>
                               )}
 
                               <button 
@@ -928,6 +983,20 @@ export default function App() {
                               >
                                 <RotateCcw className="w-3.5 h-3.5" />
                                 再读一遍
+                              </button>
+
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const rates = [0.5, 0.8, 1.0, 1.2, 1.5, 2.0];
+                                  const nextRate = rates[(rates.indexOf(playbackRate) + 1) % rates.length];
+                                  setPlaybackRate(nextRate);
+                                  if (audioRef.current) audioRef.current.playbackRate = nextRate;
+                                }}
+                                className="flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 px-3 py-1.5 rounded-lg transition-colors"
+                              >
+                                <Gauge className="w-3.5 h-3.5" />
+                                {playbackRate}x
                               </button>
                             </div>
 
@@ -989,9 +1058,10 @@ export default function App() {
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
+              </div>
 
                 {/* Sync Helper (Only if timestamps are not set) */}
                 {material.sentences.every(s => s.endTime === 0) && (

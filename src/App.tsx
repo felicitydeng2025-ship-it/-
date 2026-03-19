@@ -33,7 +33,8 @@ import { cn, formatTime } from './lib/utils';
 import { Sentence, Material } from './types';
 import { saveMaterial, getAllMaterials, deleteMaterial } from './lib/db';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Removed top-level initialization to prevent crash if API key is missing
+// const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export default function App() {
   const [material, setMaterial] = useState<Material | null>(null);
@@ -92,6 +93,14 @@ export default function App() {
     setUploadProgress(10);
     setLoadingMessage('正在准备内容...');
     setError(null);
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      setError('未检测到 Gemini API Key。请在 Vercel 环境变量中设置 GEMINI_API_KEY，或在 AI Studio 设置中配置。');
+      setIsUploading(false);
+      return;
+    }
+    const ai = new GoogleGenAI({ apiKey });
 
     let progressInterval: any;
     const startNudging = (start: number, end: number, duration: number) => {
@@ -506,6 +515,13 @@ export default function App() {
         } else {
           setIsUploading(true);
           setUploadProgress(10);
+          const apiKey = process.env.GEMINI_API_KEY;
+          if (!apiKey) {
+            setError('未检测到 Gemini API Key。请在 Vercel 环境变量中设置 GEMINI_API_KEY。');
+            setIsUploading(false);
+            return;
+          }
+          const ai = new GoogleGenAI({ apiKey });
           const docBase64 = await getBase64(textFile);
           const extractResponse = await ai.models.generateContent({
             model: "gemini-3-flash-preview",

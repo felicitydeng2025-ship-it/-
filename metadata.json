@@ -1,0 +1,7 @@
+{
+  "name": "ShadowTalk - 逐句跟读学习助手",
+  "description": "专业的语言学习逐句跟读工具，支持自定义素材上传、自动分句、音文同步及录音对比。",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

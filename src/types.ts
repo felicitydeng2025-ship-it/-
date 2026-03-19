@@ -12,6 +12,7 @@ export interface Material {
   id: string;
   title: string;
   audioUrl: string;
+  mediaType?: 'audio' | 'video';
   sentences: Sentence[];
   createdAt: number;
 }

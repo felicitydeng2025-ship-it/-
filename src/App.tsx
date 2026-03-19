@@ -73,6 +73,15 @@ export default function App() {
     loadHistory();
   }, []);
 
+  useEffect(() => {
+    const currentUrl = material?.audioUrl;
+    return () => {
+      if (currentUrl && currentUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(currentUrl);
+      }
+    };
+  }, [material]);
+
   const loadHistory = async () => {
     const data = await getAllMaterials();
     setHistory(data.sort((a, b) => b.createdAt - a.createdAt));
@@ -101,7 +110,41 @@ export default function App() {
 
     try {
       let audioUrl = '';
+      const isVideo = audioFile?.type.startsWith('video/') || 
+                      ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.mkv', '.webm'].some(ext => audioFile?.name.toLowerCase().endsWith(ext));
       
+      // Check file size (limit to 20MB to prevent browser crash and API errors)
+      if (audioFile && audioFile.size > 20 * 1024 * 1024) {
+        setError('文件过大。为了确保处理稳定，请上传 20MB 以内的音视频文件。');
+        setIsUploading(false);
+        return;
+      }
+
+      const getMimeType = (file: File, isVideo: boolean) => {
+        if (file.type && file.type !== '') return file.type;
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        if (isVideo) {
+          switch (ext) {
+            case 'mp4': return 'video/mp4';
+            case 'mov': return 'video/quicktime';
+            case 'avi': return 'video/x-msvideo';
+            case 'wmv': return 'video/x-ms-wmv';
+            case 'flv': return 'video/x-flv';
+            case 'webm': return 'video/webm';
+            case 'mkv': return 'video/x-matroska';
+            default: return 'video/mp4';
+          }
+        } else {
+          switch (ext) {
+            case 'mp3': return 'audio/mpeg';
+            case 'wav': return 'audio/wav';
+            case 'ogg': return 'audio/ogg';
+            case 'm4a': return 'audio/mp4';
+            default: return 'audio/mpeg';
+          }
+        }
+      };
+
       const getBase64 = (file: File): Promise<string> => {
         return new Promise((resolve) => {
           const reader = new FileReader();
@@ -118,21 +161,21 @@ export default function App() {
         const base64Data = await getBase64(audioFile);
         
         setUploadProgress(40);
-        setLoadingMessage('正在分析音频并对齐文本（这可能需要一分钟）...');
+        setLoadingMessage('正在分析媒体内容并对齐文本（这可能需要一分钟）...');
         startNudging(40, 85, 45000);
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
           contents: [
-            { text: `请分析这段音频，并将其对齐到以下文本。将文本拆分为逐句列表。
+            { text: `请分析这段${isVideo ? '视频' : '音频'}，并将其对齐到以下文本。将文本拆分为逐句列表。
             对于每一句，请提供：
-            1. 在音频中的开始时间（startTime）和结束时间（endTime），单位为秒（保留一位小数）。请确保时间范围完整覆盖该句子的发音，但必须在下一句开始前停止。如果两句之间有停顿，请将结束时间定在停顿的中间，确保不包含下一句的任何声音。
+            1. 在${isVideo ? '视频' : '音频'}中的开始时间（startTime）和结束时间（endTime），单位为秒（保留一位小数）。请确保时间范围完整覆盖该句子的发音，但必须在下一句开始前停止。如果两句之间有停顿，请将结束时间定在停顿的中间，确保不包含下一句的任何声音。
             2. 句子解析（analysis）：简要分析句子的语法结构或表达重点（请提供中英文对照，例如：[中文解析] / [English Analysis]）。
             3. 关键词解释（keywords）：列出句中的重点词汇及其含义。
             
             文本内容：
             ${text}
             返回格式：[{"text": "句子1", "startTime": 0.0, "endTime": 2.5, "analysis": "...", "keywords": [{"word": "...", "explanation": "..."}]}, ...]` },
-            { inlineData: { data: base64Data, mimeType: audioFile.type } }
+            { inlineData: { data: base64Data, mimeType: getMimeType(audioFile, isVideo) } }
           ],
           config: {
             responseMimeType: "application/json",
@@ -170,6 +213,7 @@ export default function App() {
           id: crypto.randomUUID(),
           title,
           audioUrl,
+          mediaType: isVideo ? 'video' : 'audio',
           sentences: results.map((r: any) => ({
             id: crypto.randomUUID(),
             text: r.text,
@@ -193,14 +237,14 @@ export default function App() {
         const base64Data = await getBase64(audioFile);
         
         setUploadProgress(50);
-        setLoadingMessage('正在转录音频并分析句子（这可能需要一分钟）...');
+        setLoadingMessage('正在转录内容并分析句子（这可能需要一分钟）...');
         startNudging(50, 85, 45000);
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
           contents: [
-            { text: `请听这段音频并将其转录为逐句列表。
+            { text: `请听这段${isVideo ? '视频' : '音频'}并将其转录为逐句列表。
             对于每一句，请提供：
-            1. 在音频中的开始时间（startTime）和结束时间（endTime），单位为秒（保留一位小数）。
+            1. 在${isVideo ? '视频' : '音频'}中的开始时间（startTime）和结束时间（endTime），单位为秒（保留一位小数）。
                重要准则：
                - startTime 必须严格包含该句第一个单词的最开头声音，宁可稍微提前 0.1s 也不要延后。
                - endTime 必须完整包含该句最后一个单词的尾音，宁可稍微延后 0.2s 也不要提前切断。
@@ -209,7 +253,7 @@ export default function App() {
             3. 关键词解释（keywords）：列出句中的重点词汇及其含义。
             
             返回格式：[{"text": "句子1", "startTime": 0.0, "endTime": 2.5, "analysis": "...", "keywords": [{"word": "...", "explanation": "..."}]}, ...]` },
-            { inlineData: { data: base64Data, mimeType: audioFile.type } }
+            { inlineData: { data: base64Data, mimeType: getMimeType(audioFile, isVideo) } }
           ],
           config: {
             responseMimeType: "application/json",
@@ -247,6 +291,7 @@ export default function App() {
           id: crypto.randomUUID(),
           title,
           audioUrl,
+          mediaType: isVideo ? 'video' : 'audio',
           sentences: results.map((r: any) => ({
             id: crypto.randomUUID(),
             text: r.text,
@@ -416,6 +461,7 @@ export default function App() {
     let textFile: File | null = null;
 
     const textExtensions = ['.txt', '.doc', '.docx', '.wps'];
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.wmv', '.flv', '.mkv', '.webm'];
     const textMimeTypes = [
       'text/plain',
       'application/msword',
@@ -429,7 +475,7 @@ export default function App() {
       const file = files[i];
       const extension = '.' + file.name.split('.').pop()?.toLowerCase();
       
-      if (file.type.startsWith('audio/')) {
+      if (file.type.startsWith('audio/') || file.type.startsWith('video/') || videoExtensions.includes(extension)) {
         audioFile = file;
       } else if (textMimeTypes.includes(file.type) || textExtensions.includes(extension)) {
         textFile = file;
@@ -437,7 +483,7 @@ export default function App() {
     }
 
     if (!audioFile && !textFile) {
-      setError('请上传音频文件或文档文件 (.txt, .doc, .docx, .wps)');
+      setError('请上传音频/视频文件或文档文件 (.txt, .doc, .docx, .wps)');
       return;
     }
 
@@ -677,14 +723,15 @@ export default function App() {
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-semibold text-slate-700">点击或拖拽上传素材</p>
-                          <p className="text-xs text-slate-500 mt-1">支持 音频 或 文档 (Word/WPS/TXT)，或两者同时上传</p>
+                          <p className="text-xs text-slate-500 mt-1">支持 音频/视频 或 文档 (Word/WPS/TXT)</p>
+                          <p className="text-[10px] text-slate-400 mt-1">建议文件小于 20MB 以获得最佳体验</p>
                         </div>
                       </div>
                       <input 
                         type="file" 
                         className="hidden" 
                         multiple 
-                        accept="audio/*,.txt,.doc,.docx,.wps" 
+                        accept="audio/*,video/*,.txt,.doc,.docx,.wps" 
                         onChange={handleFileUpload}
                       />
                       {isUploading && (
@@ -1103,6 +1150,21 @@ export default function App() {
                       <p className="text-xs text-slate-500">正在播放第 {currentSentenceIndex + 1} 句</p>
                     </div>
 
+                    {/* Media Player (Visible if Video) */}
+                    {material.mediaType === 'video' && (
+                      <div className="aspect-video bg-black rounded-2xl overflow-hidden shadow-inner">
+                        <video 
+                          ref={audioRef as any}
+                          src={material.audioUrl}
+                          onTimeUpdate={handleTimeUpdate}
+                          onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+                          onEnded={() => setIsPlaying(false)}
+                          className="w-full h-full object-contain"
+                          onClick={togglePlay}
+                        />
+                      </div>
+                    )}
+
                     {/* Active Sentence Display */}
                     <div className="bg-slate-50 rounded-2xl p-4 border border-slate-100">
                       <p className="text-sm font-medium text-slate-700 leading-relaxed mb-3">
@@ -1319,7 +1381,7 @@ export default function App() {
       </main>
 
       {/* Hidden Audio Element */}
-      {material && (
+      {material && material.mediaType !== 'video' && (
         <audio 
           ref={audioRef}
           src={material.audioUrl}

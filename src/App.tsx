@@ -95,8 +95,8 @@ export default function App() {
     setError(null);
 
     const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      setError('未检测到 Gemini API Key。请在 Vercel 环境变量中设置 GEMINI_API_KEY，或在 AI Studio 设置中配置。');
+    if (!apiKey || apiKey === '') {
+      setError('未检测到 Gemini API Key。请在 Vercel 项目设置中添加环境变量 GEMINI_API_KEY 或 VITE_GEMINI_API_KEY，并确保其值正确。');
       setIsUploading(false);
       return;
     }
@@ -445,9 +445,18 @@ export default function App() {
       } else {
         throw new Error('缺少音频或文本内容');
       }
-    } catch (err) {
-      console.error(err);
-      setError('处理内容时出错。');
+    } catch (err: any) {
+      console.error('Processing error:', err);
+      const msg = err.message || '';
+      if (msg.includes('API_KEY_INVALID')) {
+        setError('API Key 无效，请检查 Vercel 环境变量配置。');
+      } else if (msg.includes('User location is not supported')) {
+        setError('当前地区（Vercel 部署区域）不支持 Gemini API，请尝试在 Vercel 设置中更改 Function Region 为 US 或其他支持区域。');
+      } else if (msg.includes('quota')) {
+        setError('API 配额已耗尽，请稍后再试或更换 API Key。');
+      } else {
+        setError(`处理内容时出错: ${msg || '未知错误'}`);
+      }
     } finally {
       if (progressInterval) clearInterval(progressInterval);
       setTimeout(() => setIsUploading(false), 500);
@@ -516,7 +525,7 @@ export default function App() {
           setIsUploading(true);
           setUploadProgress(10);
           const apiKey = process.env.GEMINI_API_KEY;
-          if (!apiKey) {
+          if (!apiKey || apiKey === '') {
             setError('未检测到 Gemini API Key。请在 Vercel 环境变量中设置 GEMINI_API_KEY。');
             setIsUploading(false);
             return;
